@@ -1,0 +1,24 @@
+data
+results
+experiments
+wandb
+.ipynb_checkpoints
+
+# Ignore compiled Python files
+*.pyc
+__pycache__/
+
+
+# Ignore checkpoint files and directories
+checkpoints/
+*.ckpt
+*.pth
+
+# Ignore other unwanted files or directories
+*.log
+*.out
+*.bak
+*.swp
+
+# Specific paths to ignore
+/share/hariharan/ck696/allclear/baselines/DiffCR/models/ours/__pycache__/

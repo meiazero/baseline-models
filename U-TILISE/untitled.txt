@@ -1,0 +1,3 @@
+
+conda activate /share/hariharan/ck696/env_bh/anaconda/envs/allclear 
+python run_train.py config_sen12mscrts_train.yaml --save_dir "./results"
