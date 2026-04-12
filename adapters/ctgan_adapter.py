@@ -63,8 +63,16 @@ class CTGANAdapter(Dataset):
         target = item["target"][list(self.bands), 0]      # (4, H, W)
         real_B = target * 2.0 - 1.0
 
+        # cloud+shadow masks per input frame: (T, H, W), clipped to {0,1}.
+        # Replaces the FS2-pretrained cloud detector in CTGAN's original loop.
+        cld_shdw = item.get("input_cld_shdw")
+        if cld_shdw is None:
+            raise RuntimeError("input_cld_shdw missing; CTGAN adapter needs cloud masks.")
+        masks_t = torch.clip(cld_shdw.sum(dim=0), 0, 1)  # (T, H, W)
+        masks = [masks_t[t].unsqueeze(0).contiguous() for t in range(masks_t.shape[0])]  # list of (1, H, W)
+
         data_id = item.get("data_id", f"idx_{idx}")
-        return real_A, real_B, data_id
+        return real_A, real_B, masks, data_id
 
 
 def ctgan_collate(batch):
@@ -72,9 +80,11 @@ def ctgan_collate(batch):
     Stack adapter outputs into the shape CTGAN's training loop expects:
         real_A: list of 3 tensors (B, 4, H, W)
         real_B: tensor (B, 4, H, W)
+        masks:  list of 3 tensors (B, 1, H, W)  — per-frame cloud masks
         names:  list of data IDs
     """
-    real_A_lists, real_Bs, names = zip(*batch)
+    real_A_lists, real_Bs, mask_lists, names = zip(*batch)
     real_A = [torch.stack([a[t] for a in real_A_lists]) for t in range(3)]
     real_B = torch.stack(list(real_Bs))
-    return real_A, real_B, list(names)
+    masks  = [torch.stack([m[t] for m in mask_lists]) for t in range(3)]
+    return real_A, real_B, masks, list(names)
