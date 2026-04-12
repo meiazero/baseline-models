@@ -12,7 +12,7 @@ biome subset (Amazônia, Cerrado, Pantanal).
 | CTGAN       | Huang & Wu, ICIP 2022          | `CTGAN/`                     |
 | U-TILISE    | Stucker et al., TGRS 2023      | `U-TILISE/`                  |
 
-Each model is kept as-is (upstream clone). Training uses dataset adapters
+Each model is kept as-is (upstream clone from the [models.md](./models.md)). Training uses dataset adapters
 that feed the AllClear Brazil subset in the native format of each model.
 
 ## Layout
