@@ -1,0 +1,22 @@
+# CTGAN training config — Brazil biome subset (S2 R/G/B/NIR only)
+experiment_name: ctgan_brazil
+res_dir: results/ctgan
+
+data:
+  train_json: ../allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
+  val_json:   ../allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
+  tx: 3
+  image_size: 256
+
+training:
+  epochs: 100
+  batch_size: 2
+  lr: 5.0e-4
+  num_workers: 4
+  optimizer: AdamW
+  gan_mode: lsgan
+  lambda_L1: 100.0
+  lambda_aux: 50.0
+  aux_loss: true
+  label_noise: false
+  seed: 2022

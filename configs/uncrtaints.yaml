@@ -1,0 +1,49 @@
+# UnCRtainTS training config — Brazil biome subset (S2 TOA only)
+experiment_name: uncrtaints_brazil
+res_dir: results/uncrtaints
+
+data:
+  train_json: ../allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
+  val_json:   ../allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
+  tx: 3
+
+training:
+  epochs: 20
+  batch_size: 4
+  lr: 1.0e-3
+  num_workers: 4
+  val_every: 1
+
+# Mapped directly onto UnCRtainTS's parse_args namespace by the train entrypoint.
+# Only the knobs we deliberately change vs. upstream defaults are listed here.
+model:
+  model: uncrtaints
+  encoder_widths: "[128]"
+  decoder_widths: "[128,128,128,128,128]"
+  out_conv: "[13]"
+  mean_nonLinearity: true
+  var_nonLinearity: softplus
+  agg_mode: att_group
+  encoder_norm: group
+  decoder_norm: batch
+  block_type: mbconv
+  padding_mode: reflect
+  pad_value: 0.0
+  n_head: 16
+  d_model: 256
+  positional_encoding: true
+  d_k: 4
+  low_res_size: 32
+  use_v: false
+  loss: MGNLL
+  covmode: diag
+  scale_by: 1.0
+  separate_out: false
+  use_sar: false
+  pretrain: false
+  input_t: 3
+  ref_date: "2022-01-01"
+  sample_type: cloudy_cloudfree
+  vary_samples: false
+  profile: false
+  gamma: 1.0

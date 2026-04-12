@@ -1,0 +1,55 @@
+# U-TILISE training config — Brazil biome subset (S2 TOA only)
+experiment_name: utilise_brazil
+res_dir: results/utilise
+
+data:
+  train_json: ../allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
+  val_json:   ../allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
+  tx: 3
+
+training:
+  epochs: 50
+  batch_size: 4
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  num_workers: 4
+  scheduler_gamma: 0.95
+
+# Arguments forwarded to lib.models.utilise.UTILISE.__init__
+model:
+  input_dim: 13
+  output_dim: 13
+  encoder_widths: [64, 64, 64, 128]
+  decoder_widths: [32, 32, 64, 128]
+  upconv_type: transpose
+  encoder_norm: group
+  decoder_norm: batch
+  skip_norm: null
+  activation: relu
+  padding_mode: reflect
+  skip_attention: false
+  positional_encoding: true
+  n_temporal_encoding_layers: 1
+  agg_mode: att_group
+  n_head: 4
+  d_k: 4
+  dropout: 0.1
+  attn_dropout: 0.1
+  n_groups: 4
+  ltae_norm: group
+  norm_first: true
+  pad_value: 0
+  output_activation: sigmoid
+
+# Loss weights follow U-TILISE's default SEN12MSCRTS recipe.
+loss:
+  l1_loss: true
+  l1_loss_w: 1.0
+  l1_loss_occluded_input_pixels: true
+  l1_loss_occluded_input_pixels_w: 1.0
+  l1_loss_observed_input_pixels: true
+  l1_loss_observed_input_pixels_w: 1.0
+  ssim_loss: true
+  ssim_loss_w: 1.0
+  masked_l1_loss: false
+  masked_l1_loss_w: 0.0
