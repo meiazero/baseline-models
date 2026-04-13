@@ -110,7 +110,10 @@ def main():
         GEN.train()
         DIS.train()
         t0 = time.time()
-        running_G = 0.0
+        running = {
+            "G": 0.0, "G_gan": 0.0, "G_l1": 0.0, "G_att": 0.0, "G_aux": 0.0,
+            "D": 0.0, "D_fake": 0.0, "D_real": 0.0,
+        }
 
         for step, (real_A, real_B, masks, _names) in enumerate(train_loader):
             real_A = [a.to(device) for a in real_A]
@@ -157,15 +160,34 @@ def main():
                 ) * lam_aux
                 loss_G = loss_G_gan + loss_G_l1 + loss_g_att + loss_G_aux
             else:
+                loss_G_aux = torch.tensor(0.0, device=device)
                 loss_G = loss_G_gan + loss_G_l1 + loss_g_att
             loss_G.backward()
             opt_G.step()
-            running_G += float(loss_G.detach().cpu())
+
+            running["G"] += float(loss_G.detach())
+            running["G_gan"] += float(loss_G_gan.detach())
+            running["G_l1"] += float(loss_G_l1.detach())
+            running["G_att"] += float(loss_g_att.detach() if torch.is_tensor(loss_g_att) else loss_g_att)
+            running["G_aux"] += float(loss_G_aux.detach())
+            running["D"] += float(loss_D.detach())
+            running["D_fake"] += float(loss_D_fake.detach())
+            running["D_real"] += float(loss_D_real.detach())
 
             if (step + 1) % 20 == 0:
+                n = step + 1
+                its = n / max(time.time() - t0, 1e-6)
+                with torch.no_grad():
+                    d_real_p = torch.sigmoid(pred_real).mean().item()
+                    d_fake_p = torch.sigmoid(pred_fake).mean().item()
                 print(
-                    f"[ctgan] epoch {epoch} step {step + 1}/{len(train_loader)} "
-                    f"G={running_G / (step + 1):.4f} D={float(loss_D):.4f}"
+                    f"[ctgan] ep {epoch} step {n}/{len(train_loader)} "
+                    f"G={running['G']/n:.4f} (gan={running['G_gan']/n:.4f} "
+                    f"l1={running['G_l1']/n:.4f} att={running['G_att']/n:.4f} "
+                    f"aux={running['G_aux']/n:.4f}) "
+                    f"D={running['D']/n:.4f} (f={running['D_fake']/n:.4f} r={running['D_real']/n:.4f}) "
+                    f"D(x)={d_real_p:.3f} D(G)={d_fake_p:.3f} "
+                    f"lr={opt_G.param_groups[0]['lr']:.2e} {its:.2f}it/s"
                 )
 
         sched_G.step()
@@ -184,9 +206,16 @@ def main():
                 n += real_B.size(0)
         val_loss /= max(n, 1)
         elapsed = time.time() - t0
+        steps = max(len(train_loader), 1)
         print(
-            f"[ctgan] epoch {epoch} done train_G={running_G / max(len(train_loader),1):.4f} "
-            f"val_l1={val_loss:.4f} time={elapsed:.1f}s"
+            f"[ctgan] epoch {epoch} done "
+            f"G={running['G']/steps:.4f} (gan={running['G_gan']/steps:.4f} "
+            f"l1={running['G_l1']/steps:.4f} att={running['G_att']/steps:.4f} "
+            f"aux={running['G_aux']/steps:.4f}) "
+            f"D={running['D']/steps:.4f} (f={running['D_fake']/steps:.4f} "
+            f"r={running['D_real']/steps:.4f}) "
+            f"val_l1={val_loss:.4f} lr_G={opt_G.param_groups[0]['lr']:.2e} "
+            f"time={elapsed:.1f}s"
         )
 
         torch.save(GEN.state_dict(), out_dir / "G_last.pth")
