@@ -44,12 +44,6 @@ def _load_model_classes():
     return CTGAN_Generator, CTGAN_Discriminator, GANLoss, set_requires_grad
 
 
-def _downsample_mask(mask: torch.Tensor, target_hw: tuple[int, int]) -> torch.Tensor:
-    """Bilinearly resize a (B, 1, H, W) cloud mask to match the generator's
-    internal attention-mask resolution (image_size/4)."""
-    return F.interpolate(mask, size=target_hw, mode="bilinear", align_corners=False)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, required=True)
@@ -109,7 +103,6 @@ def main():
     lam_L1 = float(train_cfg["lambda_L1"])
     lam_aux = float(train_cfg["lambda_aux"])
     use_aux = bool(train_cfg["aux_loss"])
-    att_hw = (image_size // 4, image_size // 4)
 
     print(f"[ctgan] train={len(train_ds)} val={len(val_ds)} device={device}")
 
@@ -124,9 +117,9 @@ def main():
             real_B = real_B.to(device)
             real_A_cat = torch.cat(real_A, dim=1)
 
-            # Target cloud masks (replace FS2 feature extractor): downsample
-            # each per-frame mask to the generator's internal attention size.
-            M = [_downsample_mask(m.to(device), att_hw) for m in masks]
+            # Target cloud masks moved to device; spatial resize deferred to
+            # loss computation so we match the generator's actual att_mask dims.
+            M = [m.to(device) for m in masks]
 
             fake_B, att_masks, aux_pred = GEN(real_A)
 
@@ -152,7 +145,9 @@ def main():
             loss_G_l1 = criterion_l1(fake_B, real_B) * lam_L1
             loss_g_att = 0.0
             for i, att in enumerate(att_masks):
-                loss_g_att = loss_g_att + criterion_mse(att[:, 0], M[i][:, 0])
+                att_h, att_w = att.shape[-2], att.shape[-1]
+                m = F.interpolate(M[i], size=(att_h, att_w), mode="bilinear", align_corners=False)
+                loss_g_att = loss_g_att + criterion_mse(att[:, 0], m[:, 0])
 
             if use_aux:
                 loss_G_aux = (
