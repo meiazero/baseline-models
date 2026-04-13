@@ -3,8 +3,8 @@ experiment_name: ctgan_brazil
 res_dir: results/ctgan
 
 data:
-  train_json: ../allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
-  val_json:   ../allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
+  train_json: /home/emanuel.pires/Projeto/allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
+  val_json:   /home/emanuel.pires/Projeto/allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
   tx: 3
   image_size: 256
 
