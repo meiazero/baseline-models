@@ -59,6 +59,15 @@ def main():
     torch.manual_seed(train_cfg["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
+    use_amp = bool(train_cfg.get("amp", False)) and device.type == "cuda"
+    amp_dtype_str = str(train_cfg.get("amp_dtype", "bfloat16")).lower()
+    amp_dtype = torch.bfloat16 if amp_dtype_str == "bfloat16" else torch.float16
+    use_scaler = use_amp and amp_dtype == torch.float16
+
     GEN_cls, DIS_cls, GANLoss, set_requires_grad = _load_model_classes()
 
     GEN = GEN_cls(image_size=image_size).to(device)
@@ -70,6 +79,8 @@ def main():
 
     opt_G = torch.optim.AdamW(GEN.parameters(), lr=float(train_cfg["lr"]), betas=(0.5, 0.999), weight_decay=5e-4)
     opt_D = torch.optim.AdamW(DIS.parameters(), lr=float(train_cfg["lr"]), betas=(0.5, 0.999), weight_decay=5e-4)
+    scaler_G = torch.amp.GradScaler("cuda", enabled=use_scaler)
+    scaler_D = torch.amp.GradScaler("cuda", enabled=use_scaler)
     sched_G = CosineAnnealingLR(opt_G, T_max=train_cfg["epochs"], eta_min=1e-6)
     sched_D = CosineAnnealingLR(opt_D, T_max=train_cfg["epochs"], eta_min=1e-6)
 
@@ -77,22 +88,30 @@ def main():
     train_ds = CTGANAdapter(data_cfg["train_json"], tx=data_cfg["tx"], data_root=data_root)
     val_ds = CTGANAdapter(data_cfg["val_json"], tx=data_cfg["tx"], data_root=data_root)
 
+    nw = int(train_cfg["num_workers"])
+    persistent = bool(train_cfg.get("persistent_workers", False)) and nw > 0
+    prefetch = int(train_cfg.get("prefetch_factor", 2)) if nw > 0 else None
+    loader_kwargs = dict(
+        num_workers=nw,
+        collate_fn=ctgan_collate,
+        pin_memory=True,
+        persistent_workers=persistent,
+    )
+    if prefetch is not None:
+        loader_kwargs["prefetch_factor"] = prefetch
+
     train_loader = DataLoader(
         train_ds,
         batch_size=train_cfg["batch_size"],
         shuffle=True,
-        num_workers=train_cfg["num_workers"],
-        collate_fn=ctgan_collate,
-        pin_memory=True,
         drop_last=True,
+        **loader_kwargs,
     )
     val_loader = DataLoader(
         val_ds,
         batch_size=train_cfg["batch_size"],
         shuffle=False,
-        num_workers=train_cfg["num_workers"],
-        collate_fn=ctgan_collate,
-        pin_memory=True,
+        **loader_kwargs,
     )
 
     out_dir = Path(cfg["res_dir"]) / cfg["experiment_name"]
@@ -124,46 +143,51 @@ def main():
             # loss computation so we match the generator's actual att_mask dims.
             M = [m.to(device) for m in masks]
 
-            fake_B, att_masks, aux_pred = GEN(real_A)
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+                fake_B, att_masks, aux_pred = GEN(real_A)
 
             # --- Discriminator
             set_requires_grad(DIS, True)
-            opt_D.zero_grad()
-            fake_AB = torch.cat((real_A_cat, fake_B), dim=1)
-            pred_fake = DIS(fake_AB.detach())
-            loss_D_fake = criterion_gan(pred_fake, False, noise)
-            real_AB = torch.cat((real_A_cat, real_B), dim=1)
-            pred_real = DIS(real_AB)
-            loss_D_real = criterion_gan(pred_real, True, noise)
-            loss_D = 0.5 * (loss_D_fake + loss_D_real)
-            loss_D.backward()
-            opt_D.step()
+            opt_D.zero_grad(set_to_none=True)
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+                fake_AB = torch.cat((real_A_cat, fake_B), dim=1)
+                pred_fake = DIS(fake_AB.detach())
+                loss_D_fake = criterion_gan(pred_fake, False, noise)
+                real_AB = torch.cat((real_A_cat, real_B), dim=1)
+                pred_real = DIS(real_AB)
+                loss_D_real = criterion_gan(pred_real, True, noise)
+                loss_D = 0.5 * (loss_D_fake + loss_D_real)
+            scaler_D.scale(loss_D).backward()
+            scaler_D.step(opt_D)
+            scaler_D.update()
 
             # --- Generator
             set_requires_grad(DIS, False)
-            opt_G.zero_grad()
-            fake_AB = torch.cat((real_A_cat, fake_B), dim=1)
-            pred_fake = DIS(fake_AB)
-            loss_G_gan = criterion_gan(pred_fake, True, noise)
-            loss_G_l1 = criterion_l1(fake_B, real_B) * lam_L1
-            loss_g_att = 0.0
-            for i, att in enumerate(att_masks):
-                att_h, att_w = att.shape[-2], att.shape[-1]
-                m = F.interpolate(M[i], size=(att_h, att_w), mode="bilinear", align_corners=False)
-                loss_g_att = loss_g_att + criterion_mse(att[:, 0], m[:, 0])
+            opt_G.zero_grad(set_to_none=True)
+            with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+                fake_AB = torch.cat((real_A_cat, fake_B), dim=1)
+                pred_fake = DIS(fake_AB)
+                loss_G_gan = criterion_gan(pred_fake, True, noise)
+                loss_G_l1 = criterion_l1(fake_B, real_B) * lam_L1
+                loss_g_att = torch.zeros((), device=device)
+                for i, att in enumerate(att_masks):
+                    att_h, att_w = att.shape[-2], att.shape[-1]
+                    m = F.interpolate(M[i], size=(att_h, att_w), mode="bilinear", align_corners=False)
+                    loss_g_att = loss_g_att + criterion_mse(att[:, 0], m[:, 0])
 
-            if use_aux:
-                loss_G_aux = (
-                    criterion_l1(aux_pred[0], real_B)
-                    + criterion_l1(aux_pred[1], real_B)
-                    + criterion_l1(aux_pred[2], real_B)
-                ) * lam_aux
-                loss_G = loss_G_gan + loss_G_l1 + loss_g_att + loss_G_aux
-            else:
-                loss_G_aux = torch.tensor(0.0, device=device)
-                loss_G = loss_G_gan + loss_G_l1 + loss_g_att
-            loss_G.backward()
-            opt_G.step()
+                if use_aux:
+                    loss_G_aux = (
+                        criterion_l1(aux_pred[0], real_B)
+                        + criterion_l1(aux_pred[1], real_B)
+                        + criterion_l1(aux_pred[2], real_B)
+                    ) * lam_aux
+                    loss_G = loss_G_gan + loss_G_l1 + loss_g_att + loss_G_aux
+                else:
+                    loss_G_aux = torch.zeros((), device=device)
+                    loss_G = loss_G_gan + loss_G_l1 + loss_g_att
+            scaler_G.scale(loss_G).backward()
+            scaler_G.step(opt_G)
+            scaler_G.update()
 
             running["G"] += float(loss_G.detach())
             running["G_gan"] += float(loss_G_gan.detach())
@@ -201,8 +225,9 @@ def main():
             for real_A, real_B, _masks, _names in val_loader:
                 real_A = [a.to(device) for a in real_A]
                 real_B = real_B.to(device)
-                fake_B, _, _ = GEN(real_A)
-                val_loss += F.l1_loss(fake_B, real_B).item() * real_B.size(0)
+                with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
+                    fake_B, _, _ = GEN(real_A)
+                val_loss += F.l1_loss(fake_B.float(), real_B).item() * real_B.size(0)
                 n += real_B.size(0)
         val_loss /= max(n, 1)
         elapsed = time.time() - t0

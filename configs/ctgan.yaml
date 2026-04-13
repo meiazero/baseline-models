@@ -11,13 +11,17 @@ data:
 
 training:
   epochs: 100
-  batch_size: 2
-  lr: 5.0e-4
-  num_workers: 4
+  batch_size: 16
+  lr: 2.0e-4
+  num_workers: 16
+  prefetch_factor: 4
+  persistent_workers: true
   optimizer: AdamW
   gan_mode: lsgan
   lambda_L1: 100.0
   lambda_aux: 50.0
   aux_loss: true
   label_noise: false
+  amp: true
+  amp_dtype: bfloat16
   seed: 2022
