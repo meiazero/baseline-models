@@ -34,7 +34,7 @@ NUM_S2_BANDS = 13
 
 
 class UTILISEAdapter(Dataset):
-    def __init__(self, json_path: str | Path, *, tx: int = 3):
+    def __init__(self, json_path: str | Path, *, tx: int = 3, data_root: str | None = None):
         self.base = build_allclear_dataset(
             json_path,
             main_sensor="s2_toa",
@@ -42,6 +42,7 @@ class UTILISEAdapter(Dataset):
             aux_data=["cld_shdw"],
             tx=tx,
             target_mode="s2s",
+            data_root=data_root,
         )
 
     def __len__(self) -> int:

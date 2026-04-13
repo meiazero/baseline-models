@@ -71,8 +71,9 @@ def main():
     )
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=float(train_cfg["scheduler_gamma"]))
 
-    train_ds = UTILISEAdapter(data_cfg["train_json"], tx=data_cfg["tx"])
-    val_ds = UTILISEAdapter(data_cfg["val_json"], tx=data_cfg["tx"])
+    data_root = data_cfg.get("data_root")
+    train_ds = UTILISEAdapter(data_cfg["train_json"], tx=data_cfg["tx"], data_root=data_root)
+    val_ds = UTILISEAdapter(data_cfg["val_json"], tx=data_cfg["tx"], data_root=data_root)
 
     train_loader = DataLoader(
         train_ds,

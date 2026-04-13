@@ -99,8 +99,9 @@ def main():
     data_cfg = cfg["data"]
     train_cfg = cfg["training"]
 
-    train_ds = UnCRtainTSAdapter(data_cfg["train_json"], tx=data_cfg["tx"])
-    val_ds = UnCRtainTSAdapter(data_cfg["val_json"], tx=data_cfg["tx"])
+    data_root = data_cfg.get("data_root")
+    train_ds = UnCRtainTSAdapter(data_cfg["train_json"], tx=data_cfg["tx"], data_root=data_root)
+    val_ds = UnCRtainTSAdapter(data_cfg["val_json"], tx=data_cfg["tx"], data_root=data_root)
 
     train_loader = DataLoader(
         train_ds,

@@ -1,26 +1,19 @@
 """
 Common helpers for building AllClearDataset from a filtered Brazil-subset JSON.
 
-All per-model adapters in this package wrap the dataset built here and
-reshape/normalise the samples into the format their model expects.
+Uses the standalone adapters.dataset.AllClearDataset — no allclear package dep.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Iterable
 
 from torch.utils.data import Dataset
 
-# Allow importing allclear from the sibling repo without installing it.
-_ALLCLEAR_ROOT = Path(__file__).resolve().parents[2] / "allclear"
-if str(_ALLCLEAR_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ALLCLEAR_ROOT))
-
-from allclear import AllClearDataset  # noqa: E402
+from .dataset import AllClearDataset
 
 
 def load_dataset_json(json_path: str | Path) -> dict:
@@ -40,16 +33,15 @@ def build_allclear_dataset(
     data_root: str | Path | None = None,
 ) -> Dataset:
     """
-    Build an AllClearDataset pointing at a filtered Brazil-subset JSON.
+    Build an AllClearDataset from a filtered Brazil-subset JSON.
 
-    The JSON path is resolved relative to the caller's CWD if not absolute.
-    Auxiliary sensors default to none (pure S2 reconstruction); auxiliary
-    data defaults to cloud/shadow masks only — dynamic-world land cover is
-    not required for training.
+    Parameters
+    ----------
+    json_path : path to the metadata JSON file.
+    data_root : base directory for resolving .tif paths in the JSON.
+                Any path that does not exist is looked up as
+                ``data_root / fpath.lstrip("/")``.
     """
-    if data_root is not None:
-        os.environ["ALLCLEAR_DATA_ROOT"] = str(data_root)
-
     json_path = Path(json_path)
     if not json_path.is_absolute():
         json_path = Path.cwd() / json_path
@@ -66,5 +58,6 @@ def build_allclear_dataset(
         aux_data=list(aux_data) if aux_data is not None else ["cld_shdw"],
         tx=tx,
         target_mode=target_mode,
+        data_root=data_root,
         s2_toa_channels=s2_toa_channels,
     )

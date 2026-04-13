@@ -5,7 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "allclear",
     "einops>=0.8.2",
     "matplotlib>=3.10.8",
     "numpy>=2.4.4",
@@ -22,7 +21,6 @@ dependencies = [
 index-strategy = "unsafe-best-match"
 
 [tool.uv.sources]
-allclear = { path = "../allclear", editable = true }
 torch = { index = "pytorch-cu124" }
 torchvision = { index = "pytorch-cu124" }
 
