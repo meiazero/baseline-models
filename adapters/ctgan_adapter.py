@@ -35,6 +35,7 @@ class CTGANAdapter(Dataset):
         *,
         tx: int = 3,
         bands: Iterable[int] = CTGAN_BANDS,
+        data_root: str | None = None,
     ):
         if tx != 3:
             raise ValueError("CTGAN is hard-coded to three input frames (tx=3).")
@@ -46,6 +47,7 @@ class CTGANAdapter(Dataset):
             aux_data=["cld_shdw"],
             tx=tx,
             target_mode="s2p",
+            data_root=data_root,
         )
 
     def __len__(self) -> int:

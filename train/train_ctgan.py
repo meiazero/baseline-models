@@ -79,8 +79,9 @@ def main():
     sched_G = CosineAnnealingLR(opt_G, T_max=train_cfg["epochs"], eta_min=1e-6)
     sched_D = CosineAnnealingLR(opt_D, T_max=train_cfg["epochs"], eta_min=1e-6)
 
-    train_ds = CTGANAdapter(data_cfg["train_json"], tx=data_cfg["tx"])
-    val_ds = CTGANAdapter(data_cfg["val_json"], tx=data_cfg["tx"])
+    data_root = data_cfg.get("data_root")
+    train_ds = CTGANAdapter(data_cfg["train_json"], tx=data_cfg["tx"], data_root=data_root)
+    val_ds = CTGANAdapter(data_cfg["val_json"], tx=data_cfg["tx"], data_root=data_root)
 
     train_loader = DataLoader(
         train_ds,

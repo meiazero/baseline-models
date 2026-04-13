@@ -8,6 +8,7 @@ reshape/normalise the samples into the format their model expects.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -36,6 +37,7 @@ def build_allclear_dataset(
     tx: int = 3,
     target_mode: str = "s2p",
     s2_toa_channels: list[int] | None = None,
+    data_root: str | Path | None = None,
 ) -> Dataset:
     """
     Build an AllClearDataset pointing at a filtered Brazil-subset JSON.
@@ -45,6 +47,9 @@ def build_allclear_dataset(
     data defaults to cloud/shadow masks only — dynamic-world land cover is
     not required for training.
     """
+    if data_root is not None:
+        os.environ["ALLCLEAR_DATA_ROOT"] = str(data_root)
+
     json_path = Path(json_path)
     if not json_path.is_absolute():
         json_path = Path.cwd() / json_path

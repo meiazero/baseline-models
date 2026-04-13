@@ -5,6 +5,7 @@ res_dir: results/ctgan
 data:
   train_json: /home/emanuel.pires/Projeto/allclear/metadata/datasets/train_tx3_s2-s1_100pct_ama-cer-pan.json
   val_json:   /home/emanuel.pires/Projeto/allclear/metadata/datasets/val_tx3_s2-s1-landsat_100pct_ama-cer-pan.json
+  data_root:  /home/emanuel.pires/Projeto/allclear/data
   tx: 3
   image_size: 256
 
