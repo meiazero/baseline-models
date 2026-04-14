@@ -129,12 +129,32 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     best_val = float("inf")
 
-    print(f"[uncrtaints] train={len(train_ds)} val={len(val_ds)} device={device}")
+    n_params = sum(p.numel() for p in model.parameters())
+    n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    bs = train_cfg["batch_size"]
+    total_epochs = train_cfg["epochs"]
+    log_every = int(train_cfg.get("log_every", 20))
+    steps_per_epoch = len(train_loader)
 
-    for epoch in range(1, train_cfg["epochs"] + 1):
+    print(
+        f"[uncrtaints] train={len(train_ds)} val={len(val_ds)} device={device} "
+        f"batch_size={bs} epochs={total_epochs} steps/epoch={steps_per_epoch} "
+        f"params={n_params/1e6:.2f}M trainable={n_trainable/1e6:.2f}M "
+        f"out_dir={out_dir}"
+    )
+
+    global_step = 0
+    train_start = time.time()
+
+    for epoch in range(1, total_epochs + 1):
         model.train()
         t0 = time.time()
         running = 0.0
+        window_loss = 0.0
+        window_count = 0
+        window_t0 = time.time()
+        print(f"[uncrtaints] === epoch {epoch}/{total_epochs} start ===")
+
         for step, batch in enumerate(train_loader):
             inputs = {
                 "A": batch["A"],
@@ -144,19 +164,51 @@ def main():
             }
             model.set_input(inputs)
             model.optimize_parameters()
-            running += float(model.loss_G.detach().cpu())
-            if (step + 1) % 20 == 0:
-                print(
-                    f"[uncrtaints] epoch {epoch} step {step + 1}/{len(train_loader)} "
-                    f"loss={running / (step + 1):.4f}"
+            step_loss = float(model.loss_G.detach().cpu())
+            running += step_loss
+            window_loss += step_loss
+            window_count += 1
+            global_step += 1
+
+            if (step + 1) % log_every == 0 or (step + 1) == steps_per_epoch:
+                dt = time.time() - window_t0
+                imgs_per_s = (window_count * bs) / max(dt, 1e-6)
+                avg_window = window_loss / max(window_count, 1)
+                avg_epoch = running / (step + 1)
+                lr = model.optimizer_G.param_groups[0]["lr"]
+                mem = (
+                    torch.cuda.max_memory_allocated() / 1024**3
+                    if device.type == "cuda"
+                    else 0.0
                 )
+                epoch_elapsed = time.time() - t0
+                eta_epoch = epoch_elapsed / (step + 1) * (steps_per_epoch - step - 1)
+                print(
+                    f"[uncrtaints] ep {epoch}/{total_epochs} "
+                    f"step {step + 1}/{steps_per_epoch} "
+                    f"loss={step_loss:.4f} "
+                    f"avg20={avg_window:.4f} "
+                    f"avg_ep={avg_epoch:.4f} "
+                    f"lr={lr:.2e} "
+                    f"img/s={imgs_per_s:.1f} "
+                    f"gpu={mem:.2f}G "
+                    f"eta={eta_epoch:.0f}s"
+                )
+                window_loss = 0.0
+                window_count = 0
+                window_t0 = time.time()
+                if device.type == "cuda":
+                    torch.cuda.reset_peak_memory_stats()
 
         model.scheduler_G.step()
+        train_time = time.time() - t0
 
         # --- validation: plain L1 on rescaled predictions
         model.eval()
         val_loss = 0.0
+        val_nll = 0.0
         n = 0
+        v0 = time.time()
         with torch.no_grad():
             for batch in val_loader:
                 inputs = {
@@ -168,23 +220,32 @@ def main():
                 model.set_input(inputs)
                 model.forward()
                 model.get_loss_G()
+                val_nll += float(model.loss_G.detach().cpu()) * batch["B"].size(0)
                 model.rescale()
                 pred = model.fake_B[:, :, :13, ...]
                 target = model.real_B
                 val_loss += torch.nn.functional.l1_loss(pred, target).item() * target.size(0)
                 n += target.size(0)
         val_loss /= max(n, 1)
-        elapsed = time.time() - t0
+        val_nll /= max(n, 1)
+        val_time = time.time() - v0
+        total_elapsed = time.time() - train_start
+        remaining_epochs = total_epochs - epoch
+        eta_total = (total_elapsed / epoch) * remaining_epochs
         print(
-            f"[uncrtaints] epoch {epoch} done train_loss={running / max(len(train_loader),1):.4f} "
-            f"val_l1={val_loss:.4f} time={elapsed:.1f}s"
+            f"[uncrtaints] === epoch {epoch}/{total_epochs} done "
+            f"train_loss={running / max(steps_per_epoch,1):.4f} "
+            f"val_nll={val_nll:.4f} val_l1={val_loss:.4f} "
+            f"best_val_l1={min(best_val, val_loss):.4f} "
+            f"train_time={train_time:.1f}s val_time={val_time:.1f}s "
+            f"total={total_elapsed/60:.1f}m eta={eta_total/60:.1f}m ==="
         )
 
         _save_checkpoint(model, out_dir / "last.pth.tar", epoch, best_val)
         if val_loss < best_val:
             best_val = val_loss
             _save_checkpoint(model, out_dir / "best.pth.tar", epoch, best_val)
-            print(f"[uncrtaints] new best val_l1={best_val:.4f} saved")
+            print(f"[uncrtaints] new best val_l1={best_val:.4f} saved -> {out_dir/'best.pth.tar'}")
 
 
 if __name__ == "__main__":
