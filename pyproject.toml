@@ -6,14 +6,20 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "einops>=0.8.2",
+    "fvcore>=0.1.5.post20221221",
+    "h5py>=3.16.0",
     "matplotlib>=3.10.8",
     "numpy>=2.4.4",
+    "omegaconf>=2.3.0",
     "opencv-python>=4.13.0.92",
+    "pillow>=12.2.0",
+    "prodict>=0.8.22",
     "pyyaml>=6.0.3",
     "rasterio>=1.5.0",
     "scikit-image>=0.26.0",
     "scipy>=1.17.1",
     "torch>=2.5.1",
+    "torchgeometry>=0.1.2",
     "torchvision>=0.20.1",
 ]
 

@@ -1,0 +1,37 @@
+# U-TILISE evaluation config — Brazil biome test subset
+checkpoint: results/utilise/utilise_brazil/best.pth.tar
+output_json: results/utilise/utilise_brazil/eval_metrics.json
+
+batch_size: 4
+num_workers: 4
+
+data:
+  test_json:  /home/emanuel.pires/Projeto/allclear/metadata/datasets/test_tx3_s2-s1_100pct_ama-cer-pan.json
+  data_root:  /home/emanuel.pires/Projeto/allclear/data
+  tx: 3
+
+# Must match training config exactly
+model:
+  input_dim: 13
+  output_dim: 13
+  encoder_widths: [64, 64, 64, 128]
+  decoder_widths: [32, 32, 64, 128]
+  upconv_type: transpose
+  encoder_norm: group
+  decoder_norm: batch
+  skip_norm: null
+  activation: relu
+  padding_mode: reflect
+  skip_attention: false
+  positional_encoding: true
+  n_temporal_encoding_layers: 1
+  agg_mode: att_group
+  n_head: 4
+  d_k: 4
+  dropout: 0.1
+  attn_dropout: 0.1
+  n_groups: 4
+  ltae_norm: group
+  norm_first: true
+  pad_value: 0
+  output_activation: sigmoid

@@ -1,0 +1,12 @@
+# CTGAN evaluation config — Brazil biome test subset
+checkpoint: results/ctgan/ctgan_brazil/G_best.pth
+output_json: results/ctgan/ctgan_brazil/eval_metrics.json
+
+batch_size: 16
+num_workers: 8
+
+data:
+  test_json:  /home/emanuel.pires/Projeto/allclear/metadata/datasets/test_tx3_s2-s1_100pct_ama-cer-pan.json
+  data_root:  /home/emanuel.pires/Projeto/allclear/data
+  tx: 3
+  image_size: 256
