@@ -47,12 +47,16 @@ def _parse_list(v):
 
 def _build_config(cfg_yaml: dict) -> SimpleNamespace:
     """Fold YAML into a flat namespace matching UnCRtainTS's argparse output."""
+    from parse_args import create_parser  # type: ignore
+
+    defaults = vars(create_parser(mode="train").parse_args([]))
     model = dict(cfg_yaml["model"])
     for k in ("encoder_widths", "decoder_widths", "out_conv"):
         if k in model:
             model[k] = _parse_list(model[k])
     training = cfg_yaml["training"]
     flat = {
+        **defaults,
         **model,
         "lr": float(training["lr"]),
         "batch_size": training["batch_size"],
