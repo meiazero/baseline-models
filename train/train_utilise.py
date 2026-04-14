@@ -97,12 +97,31 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     best_val = float("inf")
 
-    print(f"[utilise] train={len(train_ds)} val={len(val_ds)} device={device}")
+    n_params = sum(p.numel() for p in model.parameters())
+    n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    bs = train_cfg["batch_size"]
+    total_epochs = train_cfg["epochs"]
+    log_every = int(train_cfg.get("log_every", 20))
+    steps_per_epoch = len(train_loader)
 
-    for epoch in range(1, train_cfg["epochs"] + 1):
+    print(
+        f"[utilise] train={len(train_ds)} val={len(val_ds)} device={device} "
+        f"batch_size={bs} epochs={total_epochs} steps/epoch={steps_per_epoch} "
+        f"params={n_params/1e6:.2f}M trainable={n_trainable/1e6:.2f}M "
+        f"out_dir={out_dir}"
+    )
+
+    global_step = 0
+    train_start = time.time()
+
+    for epoch in range(1, total_epochs + 1):
         model.train()
         t0 = time.time()
         running = 0.0
+        window_loss = 0.0
+        window_count = 0
+        window_t0 = time.time()
+        print(f"[utilise] === epoch {epoch}/{total_epochs} start ===")
 
         for step, batch in enumerate(train_loader):
             batch = _move_batch(batch, device)
@@ -111,12 +130,41 @@ def main():
             _, loss = loss_fn(batch, y_pred)
             loss.backward()
             optimizer.step()
-            running += float(loss.detach().cpu())
-            if (step + 1) % 20 == 0:
-                print(
-                    f"[utilise] epoch {epoch} step {step + 1}/{len(train_loader)} "
-                    f"loss={running / (step + 1):.4f}"
+            step_loss = float(loss.detach().cpu())
+            running += step_loss
+            window_loss += step_loss
+            window_count += 1
+            global_step += 1
+
+            if (step + 1) % log_every == 0 or (step + 1) == steps_per_epoch:
+                dt = time.time() - window_t0
+                imgs_per_s = (window_count * bs) / max(dt, 1e-6)
+                avg_window = window_loss / max(window_count, 1)
+                avg_epoch = running / (step + 1)
+                lr = optimizer.param_groups[0]["lr"]
+                mem = (
+                    torch.cuda.max_memory_allocated() / 1024**3
+                    if device.type == "cuda"
+                    else 0.0
                 )
+                epoch_elapsed = time.time() - t0
+                eta_epoch = epoch_elapsed / (step + 1) * (steps_per_epoch - step - 1)
+                print(
+                    f"[utilise] ep {epoch}/{total_epochs} "
+                    f"step {step + 1}/{steps_per_epoch} "
+                    f"loss={step_loss:.4f} "
+                    f"avg{log_every}={avg_window:.4f} "
+                    f"avg_ep={avg_epoch:.4f} "
+                    f"lr={lr:.2e} "
+                    f"img/s={imgs_per_s:.1f} "
+                    f"gpu={mem:.2f}G "
+                    f"eta={eta_epoch:.0f}s"
+                )
+                window_loss = 0.0
+                window_count = 0
+                window_t0 = time.time()
+                if device.type == "cuda":
+                    torch.cuda.reset_peak_memory_stats()
 
         scheduler.step()
 
@@ -124,6 +172,7 @@ def main():
         model.eval()
         val_sum = 0.0
         val_px = 0
+        v0 = time.time()
         with torch.no_grad():
             for batch in val_loader:
                 batch = _move_batch(batch, device)
@@ -133,10 +182,18 @@ def main():
                 val_sum += diff.sum().item()
                 val_px += clear.sum().item()
         val_loss = val_sum / max(val_px, 1.0)
-        elapsed = time.time() - t0
+        train_time = time.time() - t0
+        val_time = time.time() - v0
+        total_elapsed = time.time() - train_start
+        remaining_epochs = total_epochs - epoch
+        eta_total = (total_elapsed / epoch) * remaining_epochs
         print(
-            f"[utilise] epoch {epoch} done train_loss={running / max(len(train_loader),1):.4f} "
-            f"val_l1_clear={val_loss:.4f} time={elapsed:.1f}s"
+            f"[utilise] === epoch {epoch}/{total_epochs} done "
+            f"train_loss={running / max(steps_per_epoch, 1):.4f} "
+            f"val_l1_clear={val_loss:.4f} "
+            f"best_val={min(best_val, val_loss):.4f} "
+            f"train_time={train_time:.1f}s val_time={val_time:.1f}s "
+            f"total={total_elapsed/60:.1f}m eta={eta_total/60:.1f}m ==="
         )
 
         torch.save(
@@ -149,7 +206,7 @@ def main():
                 {"epoch": epoch, "state_dict": model.state_dict(), "best_val": best_val},
                 out_dir / "best.pth.tar",
             )
-            print(f"[utilise] new best val_l1_clear={best_val:.4f} saved")
+            print(f"[utilise] new best val_l1_clear={best_val:.4f} saved -> {out_dir / 'best.pth.tar'}")
 
 
 if __name__ == "__main__":
