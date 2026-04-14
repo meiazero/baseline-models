@@ -21,7 +21,7 @@ model:
   model: uncrtaints
   encoder_widths: "[128]"
   decoder_widths: "[128,128,128,128,128]"
-  out_conv: "[13]"
+  out_conv: "[26]"  # 13 mean + 13 diag var (covmode=diag)
   mean_nonLinearity: true
   var_nonLinearity: softplus
   agg_mode: att_group
