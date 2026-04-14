@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=2:00:00
-#SBATCH -o logs/slurm_%x_%j.out
-#SBATCH -e logs/slurm_%x_%j.err
+#SBATCH -o evals-logs/slurm_%x_%j.out
+#SBATCH -e evals-logs/slurm_%x_%j.err
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ export PYTHONUNBUFFERED=1
 REPO_DIR="${REPO_DIR:-$PWD}"
 cd "$REPO_DIR"
 
-mkdir -p logs
+mkdir -p evals-logs
 
 echo "=== Evaluating UnCRtainTS ==="
 uv run python -m eval.evaluate --model uncrtaints --config configs/uncrtaints_eval.yaml

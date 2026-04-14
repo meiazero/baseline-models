@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=2:00:00
-#SBATCH -o logs/slurm_%x_%j.out
-#SBATCH -e logs/slurm_%x_%j.err
+#SBATCH -o evals-logs/slurm_%x_%j.out
+#SBATCH -e evals-logs/slurm_%x_%j.err
 
 set -euo pipefail
 
@@ -23,7 +23,7 @@ export PYTHONUNBUFFERED=1
 REPO_DIR="${REPO_DIR:-$PWD}"
 cd "$REPO_DIR"
 
-mkdir -p logs
+mkdir -p evals-logs
 
 echo "=== Evaluating CTGAN ==="
 uv run python -m eval.evaluate --model ctgan --config configs/ctgan_eval.yaml
