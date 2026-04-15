@@ -154,6 +154,16 @@ def eval_uncrtaints(cfg: dict, device: torch.device) -> list[dict[str, float]]:
     for k in ("encoder_widths", "decoder_widths", "out_conv"):
         if k in flat:
             flat[k] = _parse_list(flat[k])
+
+    # Mirror train_reconstruct.py: expand out_conv for variance channels.
+    if flat.get("loss") in ("GNLL", "MGNLL"):
+        covmode = "uni" if flat.get("loss") == "GNLL" else flat.get("covmode")
+        if covmode == "iso":
+            flat["out_conv"][-1] += 1
+        elif covmode in ("uni", "diag"):
+            flat["out_conv"][-1] += 13  # S2_BANDS
+            flat["var_nonLinearity"] = "softplus"
+
     flat.update({
         "lr": 1e-3,
         "batch_size": cfg.get("batch_size", 4),
