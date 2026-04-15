@@ -32,6 +32,7 @@ model:
   use_v: false
   loss: MGNLL
   covmode: diag
+  chunk_size: null
   scale_by: 1.0
   separate_out: false
   use_sar: false
