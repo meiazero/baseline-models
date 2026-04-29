@@ -29,6 +29,9 @@ dependencies = [
     "wandb>=0.26.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["adapters*"]
+
 [tool.uv]
 index-strategy = "unsafe-best-match"
 
